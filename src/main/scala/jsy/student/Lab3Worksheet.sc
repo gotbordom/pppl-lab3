@@ -22,3 +22,12 @@ parse("function id(x) { return x }")
 parse("x => y => x + y")
 parse("x => { const z = 3; return x + z }")
 parse("function (x) { const z = 3; return x + z }")
+
+
+val f = "f"
+val x = "x"
+val e1 = Function(None, x, Binary(Plus, Var(x), N(1)))
+val e2 = N(2)
+//val e3 = evaluate(Call(e1, e2))
+
+val e4 = evaluate(Binary(Plus,Var(x),N(1)))
