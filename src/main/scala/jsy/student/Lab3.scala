@@ -48,6 +48,7 @@ object Lab3 extends JsyApplication with Lab3Like {
       case Undefined => Double.NaN
       case S(s) => try s.toDouble catch {case _ : Throwable => Double.NaN}
       case Function(_, _, _) => Double.NaN
+      case _ => throw DynamicTypeError(v)
       // Eventually add the catch all case for Double.NaN?
     }
   }
@@ -60,7 +61,7 @@ object Lab3 extends JsyApplication with Lab3Like {
       case S(s) => if (s.isEmpty) true else false
       case Undefined => false
       case Function(_, _, _) => true
-      //case _ => ??? // delete this line when done
+      case _ => throw DynamicTypeError(v) // delete this line when done
     }
   }
   
@@ -72,7 +73,7 @@ object Lab3 extends JsyApplication with Lab3Like {
         // Here in toStr(Function(_, _, _)), we will deviate from Node.js that returns the concrete syntax
         // of the function (from the input program).
       case Function(_, _, _) => "function"
-      case _ => pretty(v) // delete this line when done
+      case _ => throw DynamicTypeError(v) //pretty(v) // delete this line when done
     }
   }
 
