@@ -172,7 +172,12 @@ object Lab3 extends JsyApplication with Lab3Like {
             }
           // Add cases for error catching:
 
-          case Ne => B(toNumber(eval(env,e1)) != toNumber(eval(env,e2)))
+          case Ne =>
+            (e1,e2) match {
+              case (Function(_,_,_),v2) => throw DynamicTypeError(v2)
+              case (v1,Function(_,_,_)) => throw DynamicTypeError(v1)
+              case (v1,v2) => B(toNumber(eval(env,v1)) != toNumber(eval(env,v2)))    // THere will be an error here if I get two words that are different ...
+            }
           case Lt => B(inequalityVal(Lt, e1, e2))
           case Le => B(inequalityVal(Le, e1, e2))
           case Gt => B(inequalityVal(Gt, e1, e2))
@@ -181,22 +186,23 @@ object Lab3 extends JsyApplication with Lab3Like {
           case And => if (toBoolean(eval(env,e1))) eval(env,e2) else eval(env,e1)
           case Or => if (!toBoolean(eval(env,e1))) eval(env,e2) else eval(env,e1)
           case Seq => eval(env,e1); eval(env,e2)
-          //case _ => Undefined
+          case _ => throw DynamicTypeError(e)
         }
       case Unary(uop,e1) =>
         uop match {
-          case Neg => N(-1*toNumber(eval(env,e1)))
+          case Neg => if(toNumber(eval(env,e1)) == 0.0) N(0.0) else N(-toNumber(eval(env,e1))) //N(-1*toNumber(eval(env,e1)))
           case Not => B(!toBoolean(eval(env,e1)))
+          case _ => throw DynamicTypeError(e)
         }
       case Call(f, p) => {
         val func = eval(env,f)
         func match {
           case Function(None,pName,e1) => eval(env,ConstDecl(pName,eval(env,p),e1))
-          case Function(Some(func_name),pName,e1) => eval(env,ConstDecl(func_name,func,ConstDecl(pName,eval(env,p),e1)))
+          case Function(Some(fName),pName,e1) => eval(env,ConstDecl(fName,func,ConstDecl(pName,eval(env,p),e1)))
           case _ => throw DynamicTypeError(e)
         }
       }
-      //case _ => ??? // delete this line when done
+      //case _ => throw DynamicTypeError(e) // delete this line when done
     }
   }
     
@@ -207,6 +213,7 @@ object Lab3 extends JsyApplication with Lab3Like {
     def loop(e: Expr, n: Int): Expr = next(e,n) match {
       case None => e
       case Some(part_e) => loop(part_e,n+1)
+      //case _ => throw DynamicTypeError(e)
     }
     loop(e0, 0) // Start loop with first exp and int: 0
   }
@@ -216,14 +223,14 @@ object Lab3 extends JsyApplication with Lab3Like {
     e match {
       case N(_) | B(_) | Undefined | S(_) => e
       case Print(e1) => Print(substitute(e1, v, x))
-      case Unary(uop, e1) => ???
-      case Binary(bop, e1, e2) => ???
-      case If(e1, e2, e3) => ???
-      case Call(e1, e2) => ???
-      case Var(y) => ???
-      case Function(None, y, e1) => ???
-      case Function(Some(y1), y2, e1) => ???
-      case ConstDecl(y, e1, e2) => ???
+      case Unary(uop, e1) => Unary(uop,substitute(e1,v,x))
+      case Binary(bop, e1, e2) => Binary(bop,substitute(e1,v,x),substitute(e2,v,x))
+      case If(e1, e2, e3) => If(substitute(e1,v,x),substitute(e2,v,x),substitute(e3,v,x))
+      case Call(e1, e2) => Call(substitute(e1,v,x),substitute(e2,v,x))
+      case Var(y) => if(y==x) v else e
+      case Function(None, pName, e1) => if(pName!=x) Function(None,pName,substitute(e1,v,x)) else e
+      case Function(Some(fName), pName, e1) => if(pName!=x && fName!=x) Function(Some(fName),pName,substitute(e1,v,x)) else e
+      case ConstDecl(y, e1, e2) => if(y!=x) ConstDecl(y,substitute(e1,v,x),substitute(e2,v,x)) else ConstDecl(y,substitute(e1,v,x),e2)
     }
   }
     
@@ -231,78 +238,88 @@ object Lab3 extends JsyApplication with Lab3Like {
     e match {
       /* Base Cases: Do Rules */
       case Print(v1) if isValue(v1) => println(pretty(v1)); Undefined
-
-      //case ConstDecl(s,v1,v2) => ??? //step(extend(s,v1),v2)
-      case If(v1,v2,v3) => if(toBoolean(v1)) v2 else v3
-
-
-      case Unary(uop,v1) => uop match {
-          case Neg => if(toNumber(v1) == 0.0) N(0.0) else N(-toNumber(v1))
-          case Not => B(!toBoolean(v1))
-      }
-      case Binary(bop,v1,v2) => bop match {
-        case Plus => (v1,v2) match {
-            // Anything Plus string concatonates:
-            case (S(s),_) => S(s+toStr(v2))
-            case (_,S(s)) => S(toStr(v1)+s)
-            // Any boolean plus number is a number:
-            case (_,_) => N(toNumber(v1)+toNumber(v2))
-          }
-        case Minus => (v1,v2) match {
-          // Anything Plus string concatonates:
-          case (S(s),_) => N(toNumber(S(s)) - toNumber(v2))
-          case (_,S(s)) => N(toNumber(v1) - toNumber(S(s)))
-          case (_,_) => N(toNumber(v2)-toNumber(v2))
-        }
-        case Times =>
-          (v1,v2) match {
-            // Strings act the same as they would in minus... a number acts like a number and a word becomes NaN
-              case (S(s),_) => N(toNumber(S(s)) * toNumber(v2))
-            case (_,S(s)) => N(toNumber(v1) * toNumber(S(s)))
-            case (_,_) => N(toNumber(v2)*toNumber(v2))
-          }
-        case Div =>
-          // This has a weird case "Infinity" or 0... Which scala seems to have a double = Infinity so it seems fine
-          (v1,v2) match {
-            // Aside from the previous comment about this section, it all works the same as mult and sub.
-            case (S(s),_) => N(toNumber(S(s)) / toNumber(v2))
-            case (_,S(s)) => N(toNumber(v1) / toNumber(S(s)))
-            case (_,_) => N(toNumber(v1)/toNumber(v2))
-          }
-        case Eq =>
-          (v1,v2) match {
-            case (Function(_,_,_),e2) => throw DynamicTypeError(e2)
-            case (e1,Function(_,_,_)) => throw DynamicTypeError(e1)
-            case (e1,e2) => B(toNumber(e1) == toNumber(e2))// THere will be an error here if I get two words that are different ...
-          }
-        case Ne => B(toNumber(v1) != toNumber(v2))
-        case Lt => B(inequalityVal(Lt, v1, v2))
-        case Le => B(inequalityVal(Le, v1, v2))
-        case Gt => B(inequalityVal(Gt, v1, v2))
-        case Ge => B(inequalityVal(Ge, v1, v2))
-        // This is a really weird opperator in javascript...
-        case And => if (toBoolean(v1)) v2 else v1
-        case Or => if (!toBoolean(v1)) v2 else v1
-        case Seq => step(v1); step(v2)
-      }
-      case Call(f,p) => ???
-        // ****** Your cases here
-
-      /* Inductive Cases: Search Rules */
       case Print(v1) => Print(step(v1))
-      case Unary(uop,v1) => uop match {
-        case Not => ???
-        case Neg => ???
-        case _ => ???
-      }
-      case Binary(bop,v1,v2) => bop match {
-        // Arithmatic cases +-/* ....
-        case _ => ???
-      }
 
+      case ConstDecl(s,v1,v2) => if(!isValue(v1)) ConstDecl(s,step(v1),v2) else substitute(v2,v1,s)    // So this should be the base case the "Do" case
+      case If(v1,v2,v3) => if(!isValue(v1)) {if(toBoolean(step(v1))) v2 else v3} else {if(toBoolean(v1)) v2 else v3}
+      case Call(f,p) =>
+        if(!isValue(f)) Call(step(f),p)
+        else if(!isValue(p)) Call(f,step(p))
+        else {
+          f match {
+            case Function(Some(fName), pName, v1) => substitute(substitute(v1, p, pName), f, fName)
+            case Function(None, pName, v1) => substitute(v1, p, pName) // substitute('Subbing into','subbing with','str being replaced')
+            case _ => throw DynamicTypeError(e)
+          }
+        }
+      case Unary(uop,v1) =>
+        if(isValue(v1)) {
+          uop match {
+            case Neg => if (toNumber(v1) == 0.0) N(0.0) else N(-toNumber(v1))
+            case Not => B(!toBoolean(v1))
+            case _ => throw DynamicTypeError(e)
+          }
+        }
+        else Unary(uop,step(v1))
 
-        // ****** Your cases here
+      //case Unary(uop,e1) => Unary(uop,step(e1))
 
+      case Binary(bop,v1,v2) =>
+        if(!isValue(v1)) Binary(bop,step(v1),v2)         // Check for first input to be a var or not to step on
+        else if(!isValue(v2)) Binary(bop,v1,step(v2))    // Check for second input to be a var or not to step on
+        else {
+          bop match {
+            case Plus => (v1, v2) match {
+              // Anything Plus string concatonates:
+              case (S(s), _) => S(s + toStr(v2))
+              case (_, S(s)) => S(toStr(v1) + s)
+              // Any boolean plus number is a number:
+              case (_, _) => N(toNumber(v1) + toNumber(v2))
+            }
+            case Minus => (v1, v2) match {
+              // Anything Plus string concatonates:
+              case (S(s), _) => N(toNumber(S(s)) - toNumber(v2))
+              case (_, S(s)) => N(toNumber(v1) - toNumber(S(s)))
+              case (_, _) => N(toNumber(v1) - toNumber(v2))
+            }
+            case Times =>
+              (v1, v2) match {
+                // Strings act the same as they would in minus... a number acts like a number and a word becomes NaN
+                case (S(s), _) => N(toNumber(S(s)) * toNumber(v2))
+                case (_, S(s)) => N(toNumber(v1) * toNumber(S(s)))
+                case (_, _) => N(toNumber(v1) * toNumber(v2))
+              }
+            case Div =>
+              // This has a weird case "Infinity" or 0... Which scala seems to have a double = Infinity so it seems fine
+              (v1, v2) match {
+                // Aside from the previous comment about this section, it all works the same as mult and sub.
+                case (S(s), _) => N(toNumber(S(s)) / toNumber(v2))
+                case (_, S(s)) => N(toNumber(v1) / toNumber(S(s)))
+                case (_, _) => N(toNumber(v1) / toNumber(v2))
+              }
+            case Eq =>
+              (v1, v2) match {
+                case (Function(_, _, _), e2) => throw DynamicTypeError(e2)
+                case (e1, Function(_, _, _)) => throw DynamicTypeError(e1)
+                case (e1, e2) => B(toNumber(e1) == toNumber(e2)) // THere will be an error here if I get two words that are different ...
+              }
+            case Ne =>
+              (v1, v2) match {
+                case (Function(_, _, _), e2) => throw DynamicTypeError(e2)
+                case (e1, Function(_, _, _)) => throw DynamicTypeError(e1)
+                case (e1, e2) => B(toNumber(e1) != toNumber(e2)) // THere will be an error here if I get two words that are different ...
+              }
+            case Lt => B(inequalityVal(Lt, v1, v2))
+            case Le => B(inequalityVal(Le, v1, v2))
+            case Gt => B(inequalityVal(Gt, v1, v2))
+            case Ge => B(inequalityVal(Ge, v1, v2))
+            // This is a really weird opperator in javascript...
+            case And => if (toBoolean(v1)) v2 else v1
+            case Or => if (!toBoolean(v1)) v2 else v1
+            case Seq => step(v1); step(v2)
+            case _ => throw DynamicTypeError(e)
+          }
+        }
       /* Cases that should never match. Your cases above should ensure this. */
       case Var(_) => throw new AssertionError("Gremlins: internal error, not closed expression.")
       case N(_) | B(_) | Undefined | S(_) | Function(_, _, _) => throw new AssertionError("Gremlins: internal error, step should not be called on values.");
