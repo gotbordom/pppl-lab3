@@ -22,6 +22,7 @@ parse("function id(x) { return x }")
 parse("x => y => x + y")
 parse("x => { const z = 3; return x + z }")
 parse("function (x) { const z = 3; return x + z }")
+parse("2-1-1")
 
 
 val f = "f"
