@@ -46,9 +46,9 @@ object Lab3 extends JsyApplication with Lab3Like {
       case B(false) => 0
       case B(true) => 1
       case Undefined => Double.NaN
-      case S(s) => try s.toDouble catch {case _ : Throwable => Double.NaN}
+      case S(s) => try s.toDouble catch {case _ : Throwable => throw DynamicTypeError(v)}
       case Function(_, _, _) => Double.NaN
-      case _ => throw DynamicTypeError(v)
+      //case _ => throw DynamicTypeError(v)
       // Eventually add the catch all case for Double.NaN?
     }
   }
@@ -61,7 +61,7 @@ object Lab3 extends JsyApplication with Lab3Like {
       case S(s) => if (s.isEmpty) true else false
       case Undefined => false
       case Function(_, _, _) => true
-      case _ => throw DynamicTypeError(v) // delete this line when done
+      //case _ => throw DynamicTypeError(v) // delete this line when done
     }
   }
   
@@ -73,7 +73,7 @@ object Lab3 extends JsyApplication with Lab3Like {
         // Here in toStr(Function(_, _, _)), we will deviate from Node.js that returns the concrete syntax
         // of the function (from the input program).
       case Function(_, _, _) => "function"
-      case _ => throw DynamicTypeError(v) //pretty(v) // delete this line when done
+      case _ => pretty(v) // delete this line when done
     }
   }
 
@@ -137,31 +137,31 @@ object Lab3 extends JsyApplication with Lab3Like {
             // match for what type of expressions you have:
             (e1,e2) match {
               // Anything Plus string concatonates:
-              case (S(s),_) => S(s+toStr(eval(env,e2)))
-              case (_,S(s)) => S(toStr(eval(env,e1))+s)
+              case (S(s),_) => try S(s+toStr(eval(env,e2))) catch{case _: Throwable => throw DynamicTypeError(e2)}
+              case (_,S(s)) => try S(toStr(eval(env,e1))+s) catch{case _: Throwable => throw DynamicTypeError(e1)}
               // Any boolean plus number is a number:
               case (_,_) => N(toNumber(eval(env,e1))+toNumber(eval(env,e2)))
             }
           case Minus =>
             (e1,e2) match {
               // Strings act like standerd subtraction <- though the NaNs are a pain due to words...
-              case (S(s),_) => N(toNumber(eval(env,S(s))) - toNumber(eval(env,e2)))
-              case (_,S(s)) => N(toNumber(eval(env,e1)) - toNumber(eval(env,S(s))))
+              case (S(s),_) => try N(toNumber(eval(env,S(s))) - toNumber(eval(env,e2))) catch{case _: Throwable => throw DynamicTypeError(e2)}
+              case (_,S(s)) => try N(toNumber(eval(env,e1)) - toNumber(eval(env,S(s)))) catch{case _: Throwable => throw DynamicTypeError(e1)}
               case (_,_) => N(toNumber(eval(env,e1))-toNumber(eval(env,e2)))
             }
           case Times =>
             (e1,e2) match {
               // Strings act the same as they would in minus... a number acts like a number and a word becomes NaN
-              case (S(s),_) => N(toNumber(eval(env,S(s))) * toNumber(eval(env,e2)))
-              case (_,S(s)) => N(toNumber(eval(env,e1)) * toNumber(eval(env,S(s))))
+              case (S(s),_) => try N(toNumber(eval(env,S(s))) * toNumber(eval(env,e2))) catch{case _: Throwable => throw DynamicTypeError(e2)}
+              case (_,S(s)) => try N(toNumber(eval(env,e1)) * toNumber(eval(env,S(s)))) catch{case _: Throwable => throw DynamicTypeError(e1)}
               case (_,_) => N(toNumber(eval(env,e1))*toNumber(eval(env,e2)))
             }
           case Div =>
             // This has a weird case "Infinity" or 0... Which scala seems to have a double = Infinity so it seems fine
             (e1,e2) match {
               // Aside from the previous comment about this section, it all works the same as mult and sub.
-              case (S(s),_) => N(toNumber(eval(env,S(s))) / toNumber(eval(env,e2)))
-              case (_,S(s)) => N(toNumber(eval(env,e1)) / toNumber(eval(env,S(s))))
+              case (S(s),_) => try N(toNumber(eval(env,S(s))) / toNumber(eval(env,e2))) catch{case _: Throwable => throw DynamicTypeError(e2)}
+              case (_,S(s)) => try N(toNumber(eval(env,e1)) / toNumber(eval(env,S(s)))) catch{case _: Throwable => throw DynamicTypeError(e1)}
               case (_,_) => N(toNumber(eval(env,e1))/toNumber(eval(env,e2)))
             }
           // Note about this... the notes say to use === not ==, which are very different in both scala and Javascript's node js
@@ -187,13 +187,13 @@ object Lab3 extends JsyApplication with Lab3Like {
           case And => if (toBoolean(eval(env,e1))) eval(env,e2) else eval(env,e1)
           case Or => if (!toBoolean(eval(env,e1))) eval(env,e2) else eval(env,e1)
           case Seq => eval(env,e1); eval(env,e2)
-          case _ => throw DynamicTypeError(e)
+          //case _ => throw DynamicTypeError(e)
         }
       case Unary(uop,e1) =>
         uop match {
           case Neg => if(toNumber(eval(env,e1)) == 0.0) N(0.0) else N(-toNumber(eval(env,e1))) //N(-1*toNumber(eval(env,e1)))
           case Not => B(!toBoolean(eval(env,e1)))
-          case _ => throw DynamicTypeError(e)
+          case _ => throw DynamicTypeError(e1)
         }
       case Call(f, p) => {
         val func = eval(env,f)
@@ -214,7 +214,7 @@ object Lab3 extends JsyApplication with Lab3Like {
     def loop(e: Expr, n: Int): Expr = next(e,n) match {
       case None => e
       case Some(part_e) => loop(part_e,n+1)
-      //case _ => throw DynamicTypeError(e)
+      case _ => throw DynamicTypeError(e)
     }
     loop(e0, 0) // Start loop with first exp and int: 0
   }
@@ -234,7 +234,7 @@ object Lab3 extends JsyApplication with Lab3Like {
       case ConstDecl(y, e1, e2) => if(y!=x) ConstDecl(y,substitute(e1,v,x),substitute(e2,v,x)) else ConstDecl(y,substitute(e1,v,x),e2)
     }
   }
-    
+
   def step(e: Expr): Expr = {
     e match {
       /* Base Cases: Do Rules */
